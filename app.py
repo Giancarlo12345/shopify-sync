@@ -223,7 +223,7 @@ def test_aboutyou():
     r = requests.get("https://partner.aboutyou.com/api/v1/products", headers=headers)
     return {
         "status_code": r.status_code,
-        "response": r.text[:500]
+        "response": r.text[:500]  # Mostra solo i primi 500 caratteri
     }
 
 
@@ -232,6 +232,3 @@ def test_aboutyou():
 # ======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
-
-
