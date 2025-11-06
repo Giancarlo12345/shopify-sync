@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 
 # ✅ Chiave API presa da Render
-ABOUTYOU_API_KEY = os.getenv("22NcSCiM.0KDZ3HBKCoXRwzEOQdKzxFxnj1sqmPSgUJqaR3eYhJCrmxVPQO3YWgZj")
+ABOUTYOU_API_KEY = os.getenv("ABOUTYOU_API_KEY")
 
 ABOUTYOU_URL_STOCK = "https://partner.aboutyou.com/api/v1/products/stocks"
 ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
