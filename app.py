@@ -91,6 +91,32 @@ def handle_webhook():
 def home():
     return "✅ Sync attivo tra Shopify e AboutYou", 200
 
+@app.route('/import-products', methods=['GET'])
+def import_products():
+    """Test manuale per aggiornare prezzi e giacenze"""
+    headers = {"X-API-Key": ABOUTYOU_API_KEY, "Content-Type": "application/json"}
+
+    test_sku = "TESTSKU123"
+    test_price = 99.99
+    test_qty = 3
+
+    payload_stock = {"items": [{"sku": test_sku, "quantity": test_qty}]}
+    payload_price = {
+        "items": [{
+            "sku": test_sku,
+            "price": {"country_code": "DE", "retail_price": test_price, "sale_price": None}
+        }]
+    }
+
+    r1 = requests.put(ABOUTYOU_URL_STOCK, json=payload_stock, headers=headers)
+    r2 = requests.put(ABOUTYOU_URL_PRICE, json=payload_price, headers=headers)
+
+    return jsonify({
+        "sku": test_sku,
+        "stock_update": r1.status_code,
+        "price_update": r2.status_code
+    }), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
