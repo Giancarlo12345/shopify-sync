@@ -20,7 +20,54 @@ ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
 
 
 # ======================
-# 🔄 Webhook Shopify → AboutYou
+# 🔄 Sincronizzazione completa Shopify → AboutYou
+# ======================
+def sync_all_products():
+    """Sincronizza tutti i prodotti Shopify → AboutYou"""
+    print("🚀 Avvio sincronizzazione completa da Shopify...")
+
+    headers_shopify = {"X-Shopify-Access-Token": SHOPIFY_API_KEY}
+    headers_aboutyou = {"X-API-Key": ABOUTYOU_API_KEY, "Content-Type": "application/json"}
+
+    url_shopify = f"{SHOPIFY_STORE}/admin/api/2025-01/products.json?limit=250"
+    response = requests.get(url_shopify, headers=headers_shopify)
+
+    if response.status_code != 200:
+        print(f"❌ Errore API Shopify: {response.status_code}")
+        return
+
+    products = response.json().get("products", [])
+    print(f"🧩 Trovati {len(products)} prodotti su Shopify")
+
+    for product in products:
+        for variant in product.get("variants", []):
+            sku = variant.get("sku")
+            price = variant.get("price")
+            qty = variant.get("inventory_quantity", 0)
+
+            if not sku:
+                continue
+
+            # Aggiorna giacenza
+            stock_payload = {"items": [{"sku": sku, "quantity": qty}]}
+            stock_res = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers_aboutyou)
+
+            # Aggiorna prezzo
+            price_payload = {
+                "items": [{
+                    "sku": sku,
+                    "price": {"country_code": "DE", "retail_price": price, "sale_price": None}
+                }]
+            }
+            price_res = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers_aboutyou)
+
+            print(f"✅ {sku} → stock:{qty}, prezzo:{price} → {stock_res.status_code}/{price_res.status_code}")
+
+    print("🎯 Sincronizzazione completa terminata.")
+
+
+# ======================
+# 🔔 Webhook Shopify (evento singolo)
 # ======================
 @app.route('/shopify-webhook', methods=['POST'])
 def handle_webhook():
@@ -53,10 +100,7 @@ def handle_webhook():
     if not sku:
         return jsonify({"error": "missing sku"}), 400
 
-    headers = {
-        "Content-Type": "application/json",
-        "X-API-Key": ABOUTYOU_API_KEY
-    }
+    headers = {"Content-Type": "application/json", "X-API-Key": ABOUTYOU_API_KEY}
 
     # Aggiorna stock
     if quantity is not None:
@@ -83,11 +127,7 @@ def handle_webhook():
         price_payload = {
             "items": [{
                 "sku": sku,
-                "price": {
-                    "country_code": "DE",
-                    "retail_price": price,
-                    "sale_price": None
-                }
+                "price": {"country_code": "DE", "retail_price": price, "sale_price": None}
             }]
         }
         r2 = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers)
@@ -132,11 +172,22 @@ def import_products():
     })
 
 
+# ======================
+# 🌍 Rotte varie
+# ======================
 @app.route('/', methods=['GET'])
 def home():
     return "✅ Sync Shopify ↔️ AboutYou attivo", 200
 
 
+@app.route('/sync-all', methods=['GET'])
+def sync_all():
+    sync_all_products()
+    return jsonify({"status": "sync complete"}), 200
+
+
+# ======================
+# 🚀 Avvio app
+# ======================
 if __name__ == '__main__':
-    from gunicorn.app.base import BaseApplication
     app.run(host='0.0.0.0', port=5000)
