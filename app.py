@@ -209,6 +209,17 @@ def home():
 def sync_all():
     total = sync_all_products()
     return jsonify({"status": "sync complete", "total": total}), 200
+@app.route('/test-aboutyou', methods=['GET'])
+def test_aboutyou():
+    """Test connessione API AboutYou"""
+    import requests, os
+    api_key = os.getenv("ABOUTYOU_API_KEY")
+    headers = {"X-API-Key": api_key}
+    r = requests.get("https://partner.aboutyou.com/api/v1/products", headers=headers)
+    return {
+        "status_code": r.status_code,
+        "response": r.text[:500]  # mostriamo i primi 500 caratteri
+    }
 
 
 # ======================
@@ -216,3 +227,4 @@ def sync_all():
 # ======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
