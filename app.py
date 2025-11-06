@@ -168,8 +168,14 @@ def import_products():
         }]
     }
 
+    # 1️⃣ Aggiorna giacenza
     r1 = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers)
-    time.sleep(1)
+
+    # 🕐 2️⃣ Aspetta 3 secondi per non essere bloccato
+    import time
+    time.sleep(3)
+
+    # 3️⃣ Aggiorna prezzo
     r2 = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers)
 
     return jsonify({
@@ -181,7 +187,6 @@ def import_products():
         "stock_response": r1.text[:200],
         "price_response": r2.text[:200]
     })
-
 
 # ======================
 # 🌍 Rotte varie
@@ -202,3 +207,4 @@ def sync_all():
 # ======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
