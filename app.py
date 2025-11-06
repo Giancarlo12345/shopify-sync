@@ -209,6 +209,11 @@ def home():
 def sync_all():
     total = sync_all_products()
     return jsonify({"status": "sync complete", "total": total}), 200
+
+
+# ======================
+# 🧪 Test API AboutYou
+# ======================
 @app.route('/test-aboutyou', methods=['GET'])
 def test_aboutyou():
     """Test connessione API AboutYou"""
@@ -218,7 +223,7 @@ def test_aboutyou():
     r = requests.get("https://partner.aboutyou.com/api/v1/products", headers=headers)
     return {
         "status_code": r.status_code,
-        "response": r.text[:500]  # mostriamo i primi 500 caratteri
+        "response": r.text[:500]
     }
 
 
@@ -227,4 +232,6 @@ def test_aboutyou():
 # ======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
+
 
