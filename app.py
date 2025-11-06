@@ -4,7 +4,6 @@ import os
 
 app = Flask(__name__)
 
-# Legge la chiave API dalle variabili d’ambiente di Render
 ABOUTYOU_API_KEY = os.getenv("ABOUTYOU_API_KEY")
 ABOUTYOU_URL_STOCK = "https://partner.aboutyou.com/api/v1/products/stocks"
 ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
@@ -12,27 +11,37 @@ ABOUTYOU_URL_PRODUCTS = "https://partner.aboutyou.com/api/v1/products"
 
 @app.route('/shopify-webhook', methods=['POST'])
 def handle_webhook():
-    data = request.get_json()
+    data = request.get_json(force=True, silent=True)
     if not data:
+        print("❌ Nessun payload ricevuto")
         return jsonify({"error": "no data"}), 400
 
-    print("=== RICEVUTO WEBHOOK DA SHOPIFY ===")
+    print("=== 📦 NUOVO WEBHOOK RICEVUTO ===")
     print(data)
 
-    # Estraggo SKU, quantità e prezzo
     sku = None
     quantity = None
     price = None
 
-    if "inventory_item_id" in data:
+    # 1️⃣ Tipo INVENTORY LEVEL UPDATE
+    if "inventory_item_id" in data and "available" in data:
         sku = data.get("sku")
-        quantity = data.get("available", 0)
-    elif "variants" in data and data["variants"]:
-        sku = data["variants"][0].get("sku")
-        price = data["variants"][0].get("price")
+        quantity = data.get("available")
+        print(f"📦 Rilevato INVENTORY update: SKU={sku}, qty={quantity}")
 
+    # 2️⃣ Tipo PRODUCT UPDATE
+    elif "variants" in data and isinstance(data["variants"], list):
+        for variant in data["variants"]:
+            if variant.get("sku"):
+                sku = variant.get("sku")
+                quantity = variant.get("inventory_quantity", 0)
+                price = variant.get("price")
+                print(f"🧩 Rilevato PRODUCT update: SKU={sku}, qty={quantity}, price={price}")
+                break
+
+    # Se non abbiamo SKU, non si può aggiornare
     if not sku:
-        print("⚠️ Nessuno SKU trovato nel payload")
+        print("⚠️ Nessuno SKU trovato nel payload — niente da sincronizzare.")
         return jsonify({"error": "missing sku"}), 400
 
     headers = {
@@ -40,15 +49,14 @@ def handle_webhook():
         "X-API-Key": ABOUTYOU_API_KEY
     }
 
-    # 🔹 Aggiorna quantità se presente
+    # 🔹 Aggiornamento giacenza
     if quantity is not None:
         payload_stock = {"items": [{"sku": sku, "quantity": quantity}]}
         r = requests.put(ABOUTYOU_URL_STOCK, json=payload_stock, headers=headers)
-        print(f"🔄 Aggiornamento STOCK → SKU {sku} → quantità {quantity} | Risposta {r.status_code} {r.text}")
+        print(f"🔄 STOCK UPDATE → SKU {sku} → QTY {quantity} → {r.status_code}: {r.text[:250]}")
 
-        # Se lo SKU non esiste, lo crea automaticamente
         if r.status_code == 404:
-            print(f"⚙️ SKU {sku} non trovato — provo a creare il prodotto su AboutYou...")
+            print(f"🆕 SKU {sku} non esiste. Creo nuovo prodotto su AboutYou...")
             create_payload = {
                 "items": [{
                     "sku": sku,
@@ -59,9 +67,9 @@ def handle_webhook():
                 }]
             }
             create = requests.post(ABOUTYOU_URL_PRODUCTS, json=create_payload, headers=headers)
-            print(f"🆕 Creato nuovo prodotto → {create.status_code} {create.text}")
+            print(f"✅ Creato nuovo prodotto: {create.status_code} {create.text[:250]}")
 
-    # 🔹 Aggiorna prezzo se presente
+    # 🔹 Aggiornamento prezzo
     if price is not None:
         payload_price = {
             "items": [{
@@ -74,14 +82,14 @@ def handle_webhook():
             }]
         }
         r2 = requests.put(ABOUTYOU_URL_PRICE, json=payload_price, headers=headers)
-        print(f"💶 Aggiornamento PREZZO → SKU {sku} → prezzo {price} | Risposta {r2.status_code} {r2.text}")
+        print(f"💶 PRICE UPDATE → SKU {sku} → {price} EUR → {r2.status_code}: {r2.text[:250]}")
 
     return jsonify({"status": "ok"}), 200
 
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Shopify → AboutYou Sync attivo ✅", 200
+    return "✅ Sync attivo tra Shopify e AboutYou", 200
 
 
 if __name__ == '__main__':
