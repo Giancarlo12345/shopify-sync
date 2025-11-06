@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# Chiavi ambiente
+# Chiavi ambiente da Render
 ABOUTYOU_API_KEY = os.getenv("ABOUTYOU_API_KEY")
 SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
@@ -13,18 +13,16 @@ ABOUTYOU_URL_STOCK = "https://partner.aboutyou.com/api/v1/products/stocks"
 ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
 ABOUTYOU_URL_PRODUCTS = "https://partner.aboutyou.com/api/v1/products"
 
-
-# ======================
-# 1️⃣ Import da Shopify a AboutYou
-# ======================
+# =======================
+# 1️⃣ Sincronizzazione da Shopify a AboutYou
+# =======================
 
 def get_products_from_shopify():
+    """Legge i prodotti da Shopify via API"""
     headers = {"X-Shopify-Access-Token": SHOPIFY_API_KEY}
     url = f"{SHOPIFY_STORE}/admin/api/2025-01/products.json?limit=50"
     r = requests.get(url, headers=headers)
-    print(f"📦 Lettura prodotti Shopify → {r.status_code}")
     return r.json().get("products", [])
-
 
 def sync_product_to_aboutyou(product):
     """Crea o aggiorna prodotto su AboutYou"""
@@ -36,18 +34,19 @@ def sync_product_to_aboutyou(product):
         brand = product.get("vendor", "ShopifySync")
         price = variant.get("price")
         qty = variant.get("inventory_quantity", 0)
+        image = product.get("image", {}).get("src")
 
         headers = {
             "Content-Type": "application/json",
             "X-API-Key": ABOUTYOU_API_KEY
         }
 
-        # Aggiorna stock
+        # 1️⃣ Aggiorna stock
         payload_stock = {"items": [{"sku": sku, "quantity": qty}]}
         r1 = requests.put(ABOUTYOU_URL_STOCK, json=payload_stock, headers=headers)
 
-        # Se lo SKU non esiste, lo crea
         if r1.status_code == 404:
+            # Se non esiste, lo crea
             payload_create = {
                 "items": [{
                     "sku": sku,
@@ -60,7 +59,7 @@ def sync_product_to_aboutyou(product):
             create = requests.post(ABOUTYOU_URL_PRODUCTS, json=payload_create, headers=headers)
             print(f"🆕 Creato {sku} → {create.status_code}")
 
-        # Aggiorna prezzo
+        # 2️⃣ Aggiorna prezzo
         payload_price = {
             "items": [{
                 "sku": sku,
@@ -79,23 +78,25 @@ def sync_product_to_aboutyou(product):
 
 @app.route('/import-products', methods=['GET'])
 def import_products():
+    """Importa tutti i prodotti da Shopify a AboutYou"""
     products = get_products_from_shopify()
     for p in products:
         sync_product_to_aboutyou(p)
     return jsonify({"imported": len(products)}), 200
 
 
-# ======================
-# 2️⃣ Webhook per aggiornamenti automatici
-# ======================
+# =======================
+# 2️⃣ Webhook per aggiornamenti in tempo reale
+# =======================
 
 @app.route('/shopify-webhook', methods=['POST'])
 def handle_webhook():
+    """Riceve gli aggiornamenti di stock/prezzi da Shopify"""
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "no data"}), 400
 
-    print("=== 🔔 WEBHOOK RICEVUTO ===")
+    print("=== 📦 WEBHOOK RICEVUTO ===")
     print(data)
 
     sku = None
@@ -117,10 +118,12 @@ def handle_webhook():
 
     headers = {"Content-Type": "application/json", "X-API-Key": ABOUTYOU_API_KEY}
 
+    # Aggiorna stock
     if quantity is not None:
         payload_stock = {"items": [{"sku": sku, "quantity": quantity}]}
         requests.put(ABOUTYOU_URL_STOCK, json=payload_stock, headers=headers)
 
+    # Aggiorna prezzo
     if price is not None:
         payload_price = {
             "items": [{
