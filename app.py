@@ -1,12 +1,12 @@
 from flask import Flask, request, jsonify
 import requests
 import os
-import time  # ⏱️ Aggiunto per evitare "Too many requests"
+import time  # ⏱️ per evitare "Too many requests"
 
 app = Flask(__name__)
 
 # ======================
-# 🔑 Variabili d'ambiente (da Render)
+# 🔑 Variabili d'ambiente (Render)
 # ======================
 ABOUTYOU_API_KEY = os.getenv("ABOUTYOU_API_KEY")
 SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
@@ -19,7 +19,6 @@ ABOUTYOU_URL_PRODUCTS = "https://partner.aboutyou.com/api/v1/products"
 ABOUTYOU_URL_STOCK = "https://partner.aboutyou.com/api/v1/products/stocks"
 ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
 
-
 # ======================
 # 🔄 Sincronizzazione completa Shopify → AboutYou
 # ======================
@@ -30,47 +29,57 @@ def sync_all_products():
     headers_shopify = {"X-Shopify-Access-Token": SHOPIFY_API_KEY}
     headers_aboutyou = {"X-API-Key": ABOUTYOU_API_KEY, "Content-Type": "application/json"}
 
-    url_shopify = f"{SHOPIFY_STORE}/admin/api/2025-01/products.json?limit=250"
-    response = requests.get(url_shopify, headers=headers_shopify)
+    page = 1
+    total_imported = 0
 
-    if response.status_code != 200:
-        print(f"❌ Errore API Shopify: {response.status_code}")
-        return
+    while True:
+        url_shopify = f"{SHOPIFY_STORE}/admin/api/2025-01/products.json?limit=250&page={page}"
+        response = requests.get(url_shopify, headers=headers_shopify)
 
-    products = response.json().get("products", [])
-    print(f"🧩 Trovati {len(products)} prodotti su Shopify")
+        if response.status_code != 200:
+            print(f"❌ Errore API Shopify (pagina {page}): {response.status_code}")
+            break
 
-    for product in products:
-        for variant in product.get("variants", []):
-            sku = variant.get("sku")
-            price = variant.get("price")
-            qty = variant.get("inventory_quantity", 0)
+        products = response.json().get("products", [])
+        if not products:
+            break
 
-            if not sku:
-                continue
+        print(f"📦 Pagina {page}: {len(products)} prodotti trovati")
 
-            # Aggiorna giacenza
-            stock_payload = {"items": [{"sku": sku, "quantity": qty}]}
-            stock_res = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers_aboutyou)
-            print(f"📦 Stock aggiornato → {sku}: {qty}pz → {stock_res.status_code}")
+        for product in products:
+            for variant in product.get("variants", []):
+                sku = variant.get("sku")
+                price = variant.get("price")
+                qty = variant.get("inventory_quantity", 0)
 
-            # 🕐 Pausa 1 secondo per evitare limiti API
-            time.sleep(1)
+                if not sku:
+                    continue
 
-            # Aggiorna prezzo
-            price_payload = {
-                "items": [{
-                    "sku": sku,
-                    "price": {"country_code": "DE", "retail_price": price, "sale_price": None}
-                }]
-            }
-            price_res = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers_aboutyou)
-            print(f"💶 Prezzo aggiornato → {sku}: {price}€ → {price_res.status_code}")
+                # Aggiorna stock
+                stock_payload = {"items": [{"sku": sku, "quantity": qty}]}
+                stock_res = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers_aboutyou)
+                print(f"🔄 Stock aggiornato {sku}: {qty} → {stock_res.status_code}")
 
-            # 🕐 Pausa 1 secondo anche dopo l’update del prezzo
-            time.sleep(1)
+                # Attendi per evitare limiti
+                time.sleep(1)
 
-    print("🎯 Sincronizzazione completa terminata.")
+                # Aggiorna prezzo
+                price_payload = {
+                    "items": [{
+                        "sku": sku,
+                        "price": {"country_code": "DE", "retail_price": price, "sale_price": None}
+                    }]
+                }
+                price_res = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers_aboutyou)
+                print(f"💶 Prezzo aggiornato {sku}: {price}€ → {price_res.status_code}")
+
+                time.sleep(1)
+                total_imported += 1
+
+        page += 1
+
+    print(f"🎯 Sincronizzazione completata: {total_imported} varianti aggiornate.")
+    return total_imported
 
 
 # ======================
@@ -147,7 +156,7 @@ def handle_webhook():
 
 
 # ======================
-# 🧪 Test manuale (SKU reale)
+# 🧪 Test manuale (SKU singolo)
 # ======================
 @app.route('/import-products', methods=['GET'])
 def import_products():
@@ -171,8 +180,7 @@ def import_products():
     # 1️⃣ Aggiorna giacenza
     r1 = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers)
 
-    # 🕐 2️⃣ Aspetta 3 secondi per non essere bloccato
-    import time
+    # 🕐 2️⃣ Aspetta 3 secondi per evitare 429
     time.sleep(3)
 
     # 3️⃣ Aggiorna prezzo
@@ -188,6 +196,7 @@ def import_products():
         "price_response": r2.text[:200]
     })
 
+
 # ======================
 # 🌍 Rotte varie
 # ======================
@@ -198,8 +207,8 @@ def home():
 
 @app.route('/sync-all', methods=['GET'])
 def sync_all():
-    sync_all_products()
-    return jsonify({"status": "sync complete"}), 200
+    total = sync_all_products()
+    return jsonify({"status": "sync complete", "total": total}), 200
 
 
 # ======================
@@ -207,4 +216,3 @@ def sync_all():
 # ======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
