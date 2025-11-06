@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import time  # ⏱️ Aggiunto per evitare "Too many requests"
 
 app = Flask(__name__)
 
@@ -51,6 +52,10 @@ def sync_all_products():
             # Aggiorna giacenza
             stock_payload = {"items": [{"sku": sku, "quantity": qty}]}
             stock_res = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers_aboutyou)
+            print(f"📦 Stock aggiornato → {sku}: {qty}pz → {stock_res.status_code}")
+
+            # 🕐 Pausa 1 secondo per evitare limiti API
+            time.sleep(1)
 
             # Aggiorna prezzo
             price_payload = {
@@ -60,8 +65,10 @@ def sync_all_products():
                 }]
             }
             price_res = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers_aboutyou)
+            print(f"💶 Prezzo aggiornato → {sku}: {price}€ → {price_res.status_code}")
 
-            print(f"✅ {sku} → stock:{qty}, prezzo:{price} → {stock_res.status_code}/{price_res.status_code}")
+            # 🕐 Pausa 1 secondo anche dopo l’update del prezzo
+            time.sleep(1)
 
     print("🎯 Sincronizzazione completa terminata.")
 
@@ -122,6 +129,9 @@ def handle_webhook():
             requests.post(ABOUTYOU_URL_PRODUCTS, json=create_payload, headers=headers)
             requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers)
 
+    # 🕐 Pausa 1 secondo per sicurezza
+    time.sleep(1)
+
     # Aggiorna prezzo
     if price is not None:
         price_payload = {
@@ -159,6 +169,7 @@ def import_products():
     }
 
     r1 = requests.put(ABOUTYOU_URL_STOCK, json=stock_payload, headers=headers)
+    time.sleep(1)
     r2 = requests.put(ABOUTYOU_URL_PRICE, json=price_payload, headers=headers)
 
     return jsonify({
