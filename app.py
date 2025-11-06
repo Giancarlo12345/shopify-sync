@@ -4,8 +4,7 @@ import os
 
 app = Flask(__name__)
 
-ABOUTYOU_API_KEY = os.getenv("https://shopify-sync-gawv.onrender.com/import-products
-")
+ABOUTYOU_API_KEY = os.getenv(22NcSCiM.0KDZ3HBKCoXRwzEOQdKzxFxnj1sqmPSgUJqaR3eYhJCrmxVPQO3YWgZj)
 ABOUTYOU_URL_STOCK = "https://partner.aboutyou.com/api/v1/products/stocks"
 ABOUTYOU_URL_PRICE = "https://partner.aboutyou.com/api/v1/products/prices"
 ABOUTYOU_URL_PRODUCTS = "https://partner.aboutyou.com/api/v1/products"
@@ -120,5 +119,6 @@ def import_products():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
